@@ -2253,7 +2253,7 @@ export class CMakeProject {
         return this.build(util.isString(targets) ? [targets] : targets);
     }
 
-    private readonly targetsInPresetName = localize('targests.in.preset', '[Targets In Preset]');
+    private readonly targetsInPresetName = localize('targets.in.preset', '[Targets In Preset]');
 
     async showTargetSelector(): Promise<string | null> {
         const drv = await this.getCMakeDriverInstance();
@@ -2375,14 +2375,29 @@ export class CMakeProject {
         if (extensionManager !== undefined && extensionManager !== null && !fromWorkflow) {
             extensionManager.cleanOutputChannel();
         }
-        const buildResult = await this.build(undefined, false, false);
-        if (buildResult !== 0) {
-            throw new Error(localize('build.failed', 'Build failed.'));
+        
+        // Only build if buildBeforeRun is enabled (default: true for backward compatibility)
+        if (this.workspaceContext.config.buildBeforeRun) {
+            const buildResult = await this.build(undefined, false, false);
+            if (buildResult !== 0) {
+                throw new Error(localize('build.failed', 'Build failed.'));
+            }
+        } else {
+            // Ensure the project is at least configured when not building
+            const configResult = await this.ensureConfigured();
+            if (configResult === null) {
+                throw new Error(localize('unable.to.configure', 'Unable to configure the project'));
+            } else if (configResult !== 0) {
+                throw new Error(localize('configure.failed', 'Configure failed.'));
+            }
         }
 
         const drv = await this.getCMakeDriverInstance();
         if (!drv) {
-            throw new Error(localize('driver.died.after.build.succeeded', 'CMake driver died immediately after build succeeded.'));
+            const errorMessage = this.workspaceContext.config.buildBeforeRun 
+                ? localize('driver.died.after.build.succeeded', 'CMake driver died immediately after build succeeded.')
+                : localize('driver.died.after.configure.succeeded', 'CMake driver died immediately after configure succeeded.');
+            throw new Error(errorMessage);
         }
         return drv;
     }
